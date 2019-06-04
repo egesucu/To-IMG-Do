@@ -39,9 +39,12 @@ class AddViewController: UIViewController,UIImagePickerControllerDelegate, UINav
     
     
     
-    @objc func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [String : Any]) {
+    @objc func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+// Local variable inserted by Swift 4.2 migrator.
+let info = convertFromUIImagePickerControllerInfoKeyDictionary(info)
+
         
-        imageView.image = info[UIImagePickerControllerEditedImage] as? UIImage
+        imageView.image = info[convertFromUIImagePickerControllerInfoKey(UIImagePickerController.InfoKey.editedImage)] as? UIImage
         
         // Dismiss the picker.
         self.dismiss(animated: true, completion: nil)
@@ -61,7 +64,7 @@ class AddViewController: UIViewController,UIImagePickerControllerDelegate, UINav
         newToDo.setValue(todoTextField.text, forKey: "text")
         
         
-        let data = UIImageJPEGRepresentation(imageView.image!, 0.5)
+        let data = imageView.image!.jpegData(compressionQuality: 0.5)
         newToDo.setValue(data, forKey: "image")
         newToDo.setValue(false, forKey: "isDone")
         
@@ -79,4 +82,14 @@ class AddViewController: UIViewController,UIImagePickerControllerDelegate, UINav
         
     }
     
+}
+
+// Helper function inserted by Swift 4.2 migrator.
+fileprivate func convertFromUIImagePickerControllerInfoKeyDictionary(_ input: [UIImagePickerController.InfoKey: Any]) -> [String: Any] {
+	return Dictionary(uniqueKeysWithValues: input.map {key, value in (key.rawValue, value)})
+}
+
+// Helper function inserted by Swift 4.2 migrator.
+fileprivate func convertFromUIImagePickerControllerInfoKey(_ input: UIImagePickerController.InfoKey) -> String {
+	return input.rawValue
 }

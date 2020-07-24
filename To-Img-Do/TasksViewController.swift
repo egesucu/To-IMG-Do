@@ -1,5 +1,5 @@
 //
-//  TodoViewController.swift
+//  TasksViewController.swift
 //  To-Img-Do
 //
 //  Created by Ege Sucu on 9.05.2018.
@@ -9,16 +9,22 @@
 import UIKit
 import CoreData
 
-class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataSource {
+enum TaskActions : String {
+    case showTask,addTask
+    
+    func value() -> String {return self.rawValue}
+
+}
+
+class TasksViewController: UIViewController, UITableViewDelegate,UITableViewDataSource {
     
     //MARK: - Variable Definitions
     @IBOutlet weak var tableView: UITableView!
     
-    private var listImages = [UIImage]()
-    private var listText = [String]()
-    private var selectedImage = UIImage()
-    private var selectedText = ""
-    private var isDone = false
+    private var taskList = [Task]()
+    private var selectedTask = Task()
+    
+    lazy var refreshControl = UIRefreshControl()
     
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
@@ -28,67 +34,76 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
         tableView.delegate = self
         tableView.dataSource = self
         fetchList()
+        
+        
+        refreshControl.addTarget(self, action: #selector(fetchList), for: .valueChanged)
+        tableView.addSubview(refreshControl) // not required when using UITableViewController
+        
+        
     }
     //MARK: - Method for observing data changes.
     override func viewWillAppear(_ animated: Bool) {
         
-        NotificationCenter.default.addObserver(self, selector: #selector(fetchList), name: NSNotification.Name(rawValue: "newToDo"), object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(fetchList), name: NSNotification.Name(rawValue: "newTask"), object: nil)
         self.tableView.reloadData()
     }
+    
+    
     
     //MARK: - Fetching Data from CoreData
     @objc func fetchList(){
         
         //Clear arrays before filling them.
-        listText.removeAll(keepingCapacity: false)
-        listImages.removeAll(keepingCapacity: false)
+        taskList.removeAll()
         
         //Create Fetch Request
-        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "ToDoEntity")
+        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "TaskModel")
         fetchRequest.returnsObjectsAsFaults = false
         
         //Filter Entry by showing only items that are not done yet.
-        let predicate = NSPredicate(format: "isDone == %@", NSNumber(value: false))
+        let predicate = NSPredicate(format: "isTaskDone == %@", NSNumber(value: false))
         fetchRequest.predicate = predicate
         
         do {
-            let results = try context.fetch(fetchRequest)
+            let tasks = try context.fetch(fetchRequest)
             
-            if results.count > 0 {
-                for result in results as! [NSManagedObject] {
-                    if let text = result.value(forKey: "text") as? String{
-                        self.listText.append(text)
-                    }
-                    
-                    if let imageData = result.value(forKey: "image") as? Data{
-                        let image = UIImage(data: imageData)
-                        self.listImages.append(image!)
-                    }
-                    
-                    self.tableView.reloadData()
-                    
+            if tasks.count > 0 {
+                for task in tasks as! [NSManagedObject] {
+                    loadTask(task: task)
                 }
+                self.tableView.reloadData()
             }
+            refreshControl.endRefreshing()
             
         } catch {
-            print("error")
+            print(error.localizedDescription)
         }
+    }
+    
+    private func loadTask(task: NSManagedObject){
+        
+        if let taskName = task.value(forKey: "taskName") as? String,
+            let taskImageData = task.value(forKey: "taskImageData") as? Data{
+            
+            self.taskList.append(Task(taskName: taskName, taskImageData: taskImageData, isTaskDone: false))
+        }
+        
     }
     
     
     //MARK: - TableView Functions
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return listText.count
+        return taskList.count
     }
     //Custom Swipe Actions
     func tableView(_ tableView: UITableView, leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         //Check Done Swipe
-        let closeAction = UIContextualAction(style: .normal, title:  "Close", handler: { (ac:UIContextualAction, view:UIView, success:(Bool) -> Void) in
+        let closeAction = UIContextualAction(style: .normal, title:  "Complete", handler: { (ac:UIContextualAction, view:UIView, success:(Bool) -> Void) in
             let setDone = true
-            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "ToDoEntity")
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "TaskModel")
             fetchRequest.returnsObjectsAsFaults = false
-            let predicate = NSPredicate(format: "isDone == %@", NSNumber(value: false))
+            let predicate = NSPredicate(format: "isTaskDone == %@", NSNumber(value: false))
             fetchRequest.predicate = predicate
             do {
                 let fetchResults = try self.context.fetch(fetchRequest) as? [NSManagedObject]
@@ -96,7 +111,7 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
                 if fetchResults?.count != 0{
                     
                     let managedObject = fetchResults![0]
-                    managedObject.setValue(setDone, forKey: "isDone");
+                    managedObject.setValue(setDone, forKey: "isTaskDone");
                     
                     try self.context.save()
                     
@@ -104,13 +119,13 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
             } catch {
                 print("Update got error. See the detail \(error.localizedDescription)")
             }
-            self.listImages.remove(at: indexPath.row)
-            self.listText.remove(at: indexPath.row)
+            
+            self.taskList.remove(at: indexPath.row)
             self.tableView.deleteRows(at: [indexPath], with: .fade)
             success(true)
         })
-        closeAction.image = #imageLiteral(resourceName: "tick")
-        closeAction.backgroundColor = .blue
+        closeAction.image = UIImage(systemName: "checkmark.seal")
+        closeAction.backgroundColor = .systemBlue
         
         return UISwipeActionsConfiguration(actions: [closeAction])
         
@@ -120,9 +135,9 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
     {
         //Delete Swipe
         let modifyAction = UIContextualAction(style: .normal, title:  "Delete", handler: { (ac:UIContextualAction, view:UIView, success:(Bool) -> Void) in
-            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "ToDoEntity")
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "TaskModel")
             fetchRequest.returnsObjectsAsFaults = false
-            let predicate = NSPredicate(format: "isDone == %@", NSNumber(value: false))
+            let predicate = NSPredicate(format: "isTaskDone == %@", NSNumber(value: false))
             fetchRequest.predicate = predicate
             
             
@@ -139,8 +154,8 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
                     } catch {
                         print("Error")
                     }
-                    self.listImages.remove(at: indexPath.row)
-                    self.listText.remove(at: indexPath.row)
+                    self.taskList.remove(at: indexPath.row)
+                    
                     self.tableView.deleteRows(at: [indexPath], with: .fade)
                     
                 }
@@ -149,19 +164,20 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
             }
             success(true)
         })
-        modifyAction.image = #imageLiteral(resourceName: "delete")
-        modifyAction.backgroundColor = UIColor.red
+        modifyAction.image = UIImage(named:"􀇼")
+        modifyAction.backgroundColor = .systemRed
         
         return UISwipeActionsConfiguration(actions: [modifyAction])
     }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell  = tableView.dequeueReusableCell(withIdentifier: "todoItem", for: indexPath) as! CellTableViewCell
-        if listImages.count > 0 {
-            cell.cellImage.image = listImages[indexPath.row]
-            cell.cellItem.text = listText[indexPath.row]
+        let cell  = tableView.dequeueReusableCell(withIdentifier: "task", for: indexPath) as! TaskCell
+        if taskList.count > 0 {
+            let index = indexPath.row
+            cell.taskImageView.image = UIImage(data: taskList[index].taskImageData ?? Data())
+            cell.taskNameLabel.text = taskList[index].taskName
         } else {
-            cell.cellImage.image = #imageLiteral(resourceName: "favicon")
-            cell.cellItem.text = "No To-Do Item Here. Create one."
+            cell.taskImageView.image = nil
+            cell.taskNameLabel.text = "No To-Do Item Here. Create one."
         }
         return cell
     }
@@ -170,19 +186,20 @@ class TodoViewController: UIViewController, UITableViewDelegate,UITableViewDataS
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        selectedText = listText[indexPath.row]
-        selectedImage = listImages[indexPath.row]
-       performSegue(withIdentifier: "see", sender: nil)
+        selectedTask = taskList[indexPath.row]
+        performSegue(withIdentifier: TaskActions.showTask.value(), sender: nil)
     }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-        if segue.identifier == "see"{
-            let destinationVC = segue.destination as! DetailViewController
-            destinationVC.chosenImage = selectedImage
-            destinationVC.chosenText = selectedText
+        if segue.identifier == TaskActions.showTask.value(){
+            let destinationVC = segue.destination as! SingleTaskViewController
+            destinationVC.selectedTask = selectedTask
         }
     }
     
+    @IBAction func addButtonPressed(_ sender: Any) {
+        performSegue(withIdentifier: TaskActions.addTask.value(), sender: nil)
+    }
     
 }
 

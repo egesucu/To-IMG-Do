@@ -1,5 +1,5 @@
 //
-//  CellTableViewCell.swift
+//  TaskCell.swift
 //  To-Img-Do
 //
 //  Created by Ege Sucu on 11.05.2018.
@@ -8,13 +8,13 @@
 
 import UIKit
 
-class CellTableViewCell: UITableViewCell {
-    //List ViewController'dan geliyor
-    @IBOutlet weak var cellImage: UIImageView!
-    @IBOutlet weak var cellItem: UILabel!
-    //Done ViewController'dan geliyor.
-    @IBOutlet weak var doneImage: UIImageView!
-    @IBOutlet weak var doneCell: UILabel!
+class TaskCell: UITableViewCell {
+    //TasksViewController ViewController'dan geliyor
+    @IBOutlet weak var taskImageView: UIImageView!
+    @IBOutlet weak var taskNameLabel: UILabel!
+    //CompletedTaskViewController ViewController'dan geliyor.
+    @IBOutlet weak var completedTaskImageView: UIImageView!
+    @IBOutlet weak var completedTaskLabel: UILabel!
     
 
     override func awakeFromNib() {

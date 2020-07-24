@@ -1,5 +1,5 @@
 //
-//  Done.swift
+//  CompletedTaskViewController.swift
 //  To-Img-Do
 //
 //  Created by Ege Sucu on 9.05.2018.
@@ -9,12 +9,15 @@
 import UIKit
 import CoreData
 
-class Done: UIViewController, UITableViewDelegate,UITableViewDataSource {
+class CompletedTaskViewController: UIViewController, UITableViewDelegate,UITableViewDataSource {
     
     @IBOutlet weak var tableView: UITableView!
-    var listImages = [UIImage]()
-    var listText = [String]()
-    var isDone = true
+   
+    private var taskList = [Task]()
+    private var selectedTask = Task()
+    
+    lazy var refreshControl = UIRefreshControl()
+    
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     override func viewDidLoad() {
@@ -24,6 +27,8 @@ class Done: UIViewController, UITableViewDelegate,UITableViewDataSource {
         tableView.dataSource = self
         fetchList()
         
+        refreshControl.addTarget(self, action: #selector(fetchList), for: .valueChanged)
+        tableView.addSubview(refreshControl) // not required when using UITableViewController
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -38,58 +43,59 @@ class Done: UIViewController, UITableViewDelegate,UITableViewDataSource {
     }
     
     @objc func fetchList(){
-        listText.removeAll(keepingCapacity: false)
-        listImages.removeAll(keepingCapacity: false)
+        taskList.removeAll(keepingCapacity: false)
         
         let appDelegate = UIApplication.shared.delegate as! AppDelegate
         let context = appDelegate.persistentContainer.viewContext
         
-        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "ToDoEntity")
+        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "TaskModel")
         fetchRequest.returnsObjectsAsFaults = false
         
         
-        let predicate = NSPredicate(format: "isDone == %@", NSNumber(value: true))
+        let predicate = NSPredicate(format: "isTaskDone == %@", NSNumber(value: true))
         fetchRequest.predicate = predicate
         
         do {
-            let results = try context.fetch(fetchRequest)
+            let tasks = try context.fetch(fetchRequest)
             
-            if results.count > 0 {
-                for result in results as! [NSManagedObject] {
-                    if let text = result.value(forKey: "text") as? String{
-                        self.listText.append(text)
-                    }
-                    
-                    if let imageData = result.value(forKey: "image") as? Data{
-                        let image = UIImage(data: imageData)
-                        self.listImages.append(image!)
-                    }
-                    
-                    self.tableView.reloadData()
-                    
+            if tasks.count > 0 {
+                for task in tasks as! [NSManagedObject] {
+                    loadTask(task: task)
+ 
                 }
+                self.tableView.reloadData()
+                
             }
-            
+            refreshControl.endRefreshing()
         } catch {
             print("error")
         }
     }
     
+    private func loadTask(task: NSManagedObject){
+        
+        if let taskName = task.value(forKey: "taskName") as? String,
+            let taskImageData = task.value(forKey: "taskImageData") as? Data{
+            
+            self.taskList.append(Task(taskName: taskName, taskImageData: taskImageData, isTaskDone: true))
+        }
+        
+    }
+    
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return listText.count
+        return taskList.count
     }
     
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell  = tableView.dequeueReusableCell(withIdentifier: "todoItem", for: indexPath) as! CellTableViewCell
-        if listImages.count > 0 {
-            cell.doneImage.image = listImages[indexPath.row]
-            cell.doneCell.text = listText[indexPath.row]
-            cell.doneCell.textColor = .gray
-            
+        let cell  = tableView.dequeueReusableCell(withIdentifier: "task", for: indexPath) as! TaskCell
+        if taskList.count > 0 {
+            let index = indexPath.row
+            cell.completedTaskImageView.image = UIImage(data: taskList[index].taskImageData ?? Data())
+            cell.completedTaskLabel.text = taskList[index].taskName
         } else {
-            cell.doneImage.image = #imageLiteral(resourceName: "favicon")
-            cell.doneCell.text = "No To-Do Item Here. Do some."
+            cell.completedTaskImageView.image = #imageLiteral(resourceName: "second")
+            cell.completedTaskLabel.text = "No To-Do Item Here. Do some."
         }
         return cell
     }
@@ -99,9 +105,9 @@ class Done: UIViewController, UITableViewDelegate,UITableViewDataSource {
     {
         //Delete Swipe
         let modifyAction = UIContextualAction(style: .normal, title:  "Delete", handler: { (ac:UIContextualAction, view:UIView, success:(Bool) -> Void) in
-            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "ToDoEntity")
+            let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "TaskModel")
             fetchRequest.returnsObjectsAsFaults = false
-            let predicate = NSPredicate(format: "isDone == %@", NSNumber(value: true))
+            let predicate = NSPredicate(format: "isTaskDone == %@", NSNumber(value: true))
             fetchRequest.predicate = predicate
             
             
@@ -118,8 +124,7 @@ class Done: UIViewController, UITableViewDelegate,UITableViewDataSource {
                     } catch {
                         print("Error")
                     }
-                    self.listImages.remove(at: indexPath.row)
-                    self.listText.remove(at: indexPath.row)
+                    self.taskList.remove(at: indexPath.row)
                     self.tableView.deleteRows(at: [indexPath], with: .fade)
                     
                 }
@@ -128,8 +133,8 @@ class Done: UIViewController, UITableViewDelegate,UITableViewDataSource {
             }
             success(true)
         })
-        modifyAction.image = #imageLiteral(resourceName: "delete")
-        modifyAction.backgroundColor = UIColor.red
+        modifyAction.image = UIImage(systemName: "xmark-seal")
+        modifyAction.backgroundColor = .systemRed
         
         return UISwipeActionsConfiguration(actions: [modifyAction])
     }
